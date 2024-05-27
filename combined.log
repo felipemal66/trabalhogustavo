@@ -1,3 +1,8 @@
 {"level":"info","message":"Cache miss for /produtos"}
 {"level":"info","message":"Cache miss for /produtos/"}
 {"level":"info","message":"Cache cleared after DELETE /produtos/7"}
+{"level":"info","message":"Cache miss for /clientes/"}
+{"level":"info","message":"Cache miss for /produtos"}
+{"level":"info","message":"Cache cleared after POST /produtos"}
+{"level":"info","message":"Cache cleared after DELETE /produtos/6"}
+{"level":"info","message":"Cache cleared after DELETE /produtos/8"}

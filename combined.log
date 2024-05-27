@@ -1,0 +1,3 @@
+{"level":"info","message":"Cache miss for /produtos"}
+{"level":"info","message":"Cache miss for /produtos/"}
+{"level":"info","message":"Cache cleared after DELETE /produtos/7"}

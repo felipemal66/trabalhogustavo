@@ -5,6 +5,8 @@ const morgan = require('morgan');
 const mysql = require('mysql2/promise');
 const dotenv = require('dotenv');
 const path = require('path');
+const NodeCache = require('node-cache');
+const winston = require('winston');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,6 +16,22 @@ dotenv.config({ path: path.resolve(__dirname, 'configs', '.env') });
 
 // Imprimir as variáveis de ambiente carregadas
 console.log('Variáveis de ambiente carregadas:', process.env);
+
+// Configuração do logger
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.json(),
+    transports: [
+        new winston.transports.File({ filename: 'error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'combined.log' }),
+    ],
+});
+
+if (process.env.NODE_ENV !== 'production') {
+    logger.add(new winston.transports.Console({
+        format: winston.format.simple(),
+    }));
+}
 
 // Configurações do servidor Express
 app.use(express.json());
@@ -37,19 +55,42 @@ app.use((req, res, next) => {
             next();
         })
         .catch((error) => {
-            console.error('Erro ao conectar ao banco de dados:', error);
+            logger.error('Erro ao conectar ao banco de dados:', error);
             next(error);
         });
 });
 
+// Configuração do cache
+const cache = new NodeCache({ stdTTL: 100, checkperiod: 120 });
+
+// Middleware para caching
+const cacheMiddleware = (req, res, next) => {
+    const key = req.originalUrl;
+    const cachedResponse = cache.get(key);
+
+    if (cachedResponse) {
+        logger.info(`Cache hit for ${key}`);
+        return res.json(cachedResponse);
+    } else {
+        logger.info(`Cache miss for ${key}`);
+        res.sendResponse = res.json;
+        res.json = (body) => {
+            cache.set(key, body);
+            res.sendResponse(body);
+        };
+        next();
+    }
+};
+
 // Operações CRUD para produtos
 
 // Endpoint /produtos para buscar todos os produtos (GET)
-app.get('/produtos', async (req, res, next) => {
+app.get('/produtos', cacheMiddleware, async (req, res, next) => {
     try {
         const [rows, fields] = await req.db.execute('SELECT * FROM produtos');
         res.json(rows);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -67,13 +108,18 @@ app.post('/produtos', async (req, res, next) => {
         const novoProdutoId = result[0].insertId;
         
         res.status(201).json({ id: novoProdutoId, nome, preco, message: 'Produto criado com sucesso' });
+
+        // Clear cache after data modification
+        cache.flushAll();
+        logger.info(`Cache cleared after POST /produtos`);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
 
 // Endpoint /produtos/:id para buscar um produto pelo ID (GET)
-app.get('/produtos/:id', async (req, res, next) => {
+app.get('/produtos/:id', cacheMiddleware, async (req, res, next) => {
     try {
         const [rows, fields] = await req.db.execute('SELECT * FROM produtos WHERE id = ?', [req.params.id]);
         if (rows.length === 0) {
@@ -81,6 +127,7 @@ app.get('/produtos/:id', async (req, res, next) => {
         }
         res.json(rows[0]);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -100,7 +147,12 @@ app.put('/produtos/:id', async (req, res, next) => {
         }
 
         res.json({ message: 'Produto atualizado com sucesso' });
+
+        // Clear cache after data modification
+        cache.flushAll();
+        logger.info(`Cache cleared after PUT /produtos/${req.params.id}`);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -113,7 +165,12 @@ app.delete('/produtos/:id', async (req, res, next) => {
             throw new Error('Produto não encontrado');
         }
         res.json({ message: 'Produto excluído com sucesso' });
+
+        // Clear cache after data modification
+        cache.flushAll();
+        logger.info(`Cache cleared after DELETE /produtos/${req.params.id}`);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -121,11 +178,12 @@ app.delete('/produtos/:id', async (req, res, next) => {
 // Operações CRUD para clientes
 
 // Endpoint /clientes para buscar todos os clientes (GET)
-app.get('/clientes', async (req, res, next) => {
+app.get('/clientes', cacheMiddleware, async (req, res, next) => {
     try {
         const [rows, fields] = await req.db.execute('SELECT * FROM clientes');
         res.json(rows);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -143,13 +201,18 @@ app.post('/clientes', async (req, res, next) => {
         const novoClienteId = result[0].insertId;
         
         res.status(201).json({ id: novoClienteId, nome, sobrenome, email, idade, message: 'Cliente criado com sucesso' });
+
+        // Clear cache after data modification
+        cache.flushAll();
+        logger.info(`Cache cleared after POST /clientes`);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
 
 // Endpoint /clientes/:id para buscar um cliente pelo ID (GET)
-app.get('/clientes/:id', async (req, res, next) => {
+app.get('/clientes/:id', cacheMiddleware, async (req, res, next) => {
     try {
         const [rows, fields] = await req.db.execute('SELECT * FROM clientes WHERE id = ?', [req.params.id]);
         if (rows.length === 0) {
@@ -157,6 +220,7 @@ app.get('/clientes/:id', async (req, res, next) => {
         }
         res.json(rows[0]);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -176,7 +240,12 @@ app.put('/clientes/:id', async (req, res, next) => {
         }
 
         res.json({ message: 'Cliente atualizado com sucesso' });
+
+        // Clear cache after data modification
+        cache.flushAll();
+        logger.info(`Cache cleared after PUT /clientes/${req.params.id}`);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -189,7 +258,12 @@ app.delete('/clientes/:id', async (req, res, next) => {
             throw new Error('Cliente não encontrado');
         }
         res.json({ message: 'Cliente excluído com sucesso' });
+
+        // Clear cache after data modification
+        cache.flushAll();
+        logger.info(`Cache cleared after DELETE /clientes/${req.params.id}`);
     } catch (error) {
+        logger.error(error.message);
         next(error);
     }
 });
@@ -213,3 +287,4 @@ app.use((err, req, res, next) => {
 app.listen(port, () => {
     console.log(`Servidor rodando na porta ${port}`);
 });
+
